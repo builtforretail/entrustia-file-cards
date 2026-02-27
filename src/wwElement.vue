@@ -89,6 +89,9 @@
     <!-- Empty state -->
     <div v-if="!processedFiles.length" class="empty-state">
       No files found.
+      <span style="display:block;font-size:10px;color:#bbb;margin-top:4px;">
+        Received: {{ Array.isArray(props.content?.data) ? props.content.data.length + ' items' : typeof props.content?.data }}
+      </span>
     </div>
   </div>
 </template>
@@ -113,31 +116,63 @@ export default {
     /* wwEditor:end */
 
     const processedFiles = computed(() => {
-      const items = props.content?.data;
-      if (!Array.isArray(items)) return [];
+      try {
+        const raw = props.content?.data;
+        let items = [];
+        if (Array.isArray(raw)) {
+          items = raw;
+        } else if (raw && typeof raw === 'object') {
+          // Some WeWeb bindings wrap the array in a data property
+          if (Array.isArray(raw.data)) items = raw.data;
+          else return [];
+        } else {
+          return [];
+        }
 
-      return items.map((item) => {
-        const tags = Array.isArray(item?.ai_tags)
-          ? item.ai_tags
-          : typeof item?.ai_tags === 'string'
-          ? (() => { try { return JSON.parse(item.ai_tags); } catch (e) { return []; } })()
-          : [];
+        return items.map((item) => {
+          try {
+            let tags = [];
+            if (Array.isArray(item?.ai_tags)) {
+              tags = item.ai_tags;
+            } else if (typeof item?.ai_tags === 'string' && item.ai_tags.trim()) {
+              try { tags = JSON.parse(item.ai_tags); } catch (e) { tags = []; }
+            }
+            if (!Array.isArray(tags)) tags = [];
 
-        return {
-          id: item?.id ?? Math.random(),
-          created_at: item?.created_at ?? '',
-          name: item?.name || item?.original_filename || '',
-          original_filename: item?.original_filename || '',
-          drive_url: item?.drive_url || '',
-          mime_type: item?.mime_type || '',
-          size_bytes: item?.size_bytes ?? 0,
-          ai_tags: tags,
-          ai_folder_name: item?.ai_folder_name || '',
-          ai_summary: item?.ai_summary || '',
-          dropbox_path_lower: item?.dropbox_path_lower || '',
-          _raw: item,
-        };
-      });
+            return {
+              id: item?.id != null ? item.id : Math.random(),
+              created_at: item?.created_at || '',
+              name: item?.name || item?.original_filename || '',
+              original_filename: item?.original_filename || '',
+              drive_url: item?.drive_url || '',
+              mime_type: item?.mime_type || '',
+              size_bytes: item?.size_bytes != null ? item.size_bytes : 0,
+              ai_tags: tags,
+              ai_folder_name: item?.ai_folder_name || '',
+              ai_summary: item?.ai_summary || '',
+              dropbox_path_lower: item?.dropbox_path_lower || '',
+              _raw: item,
+            };
+          } catch (e) {
+            return {
+              id: Math.random(),
+              created_at: '',
+              name: 'Error reading file',
+              original_filename: '',
+              drive_url: '',
+              mime_type: '',
+              size_bytes: 0,
+              ai_tags: [],
+              ai_folder_name: '',
+              ai_summary: '',
+              dropbox_path_lower: '',
+              _raw: item,
+            };
+          }
+        });
+      } catch (e) {
+        return [];
+      }
     });
 
     const primaryColor = computed(() => props.content?.primaryColor || '#2d6a4f');
