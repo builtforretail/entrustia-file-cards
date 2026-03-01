@@ -1,7 +1,29 @@
 <template>
   <div class="file-card-list" :style="containerStyle">
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <div class="filter-search-wrap">
+        <span class="filter-search-icon">🔍</span>
+        <input
+          class="filter-input"
+          type="text"
+          placeholder="File Name"
+          :value="searchQuery"
+          @input="handleSearchInput"
+        />
+      </div>
+      <select class="filter-select" :value="sourceFilter" @change="handleSourceChange">
+        <option value="all">All</option>
+        <option value="internal">Internal</option>
+        <option value="portal">Portal</option>
+      </select>
+      <button class="filter-reset" type="button" @click="handleReset">Reset</button>
+    </div>
+
+    <!-- Cards -->
     <div
-      v-for="item in processedItems"
+      v-for="item in filteredItems"
       :key="item.id"
       class="file-card"
       :style="cardStyle"
@@ -34,6 +56,14 @@
         </button>
       </div>
 
+      <!-- Source Badge -->
+      <div class="card-field">
+        <span class="field-label" :style="labelStyle">Source</span>
+        <span class="field-value" :style="valueStyle">
+          <span class="badge badge--internal">Internal</span>
+        </span>
+      </div>
+
       <!-- File Name -->
       <div class="card-field file-name-field">
         <span
@@ -46,14 +76,6 @@
           @keydown.space.prevent="handleNameClick(item)"
         >
           {{ item.name }}
-        </span>
-      </div>
-
-      <!-- Source -->
-      <div class="card-field">
-        <span class="field-label" :style="labelStyle">Source</span>
-        <span class="field-value" :style="valueStyle">
-          <span class="badge badge--internal">Internal</span>
         </span>
       </div>
 
@@ -105,7 +127,7 @@
     </div>
 
     <!-- Empty state -->
-    <div v-if="!processedItems.length" class="empty-state" :style="emptyStateStyle">
+    <div v-if="!filteredItems.length" class="empty-state" :style="emptyStateStyle">
       No files to display.
     </div>
   </div>
@@ -148,6 +170,18 @@ export default {
         defaultValue: 0,
       });
 
+    const { value: filteredCount, setValue: setFilteredCount } =
+      wwLib.wwVariable.useComponentVariable({
+        uid: props.uid,
+        name: 'filteredCount',
+        type: 'number',
+        defaultValue: 0,
+      });
+
+    // Filter state
+    const searchQuery = ref('');
+    const sourceFilter = ref('all');
+
     const hoverState = ref({});
     const activeState = ref({});
 
@@ -157,6 +191,19 @@ export default {
 
     const setActive = (id, btn, val) => {
       activeState.value = { ...activeState.value, [id + '-' + btn]: val };
+    };
+
+    const handleSearchInput = (e) => {
+      searchQuery.value = e.target.value;
+    };
+
+    const handleSourceChange = (e) => {
+      sourceFilter.value = e.target.value;
+    };
+
+    const handleReset = () => {
+      searchQuery.value = '';
+      sourceFilter.value = 'all';
     };
 
     const processedItems = computed(() => {
@@ -177,13 +224,13 @@ export default {
 
         return {
           ...item,
-          id: id ?? 'item-' + Math.random(),
+          id: id || 'item-' + Math.random(),
           name: name || item?.original_filename || 'Untitled',
           ai_folder_name: item?.ai_folder_name || '',
           ai_tags: tags,
           ai_summary: item?.ai_summary || '',
           created_at: item?.created_at || '',
-          size_bytes: item?.size_bytes ?? 0,
+          size_bytes: item?.size_bytes || 0,
           drive_url: item?.drive_url || '',
           dropbox_path_lower: item?.dropbox_path_lower || '',
           _original: item,
@@ -191,7 +238,20 @@ export default {
       });
     });
 
-    watch(processedItems, (items) => { setItemCount(items?.length ?? 0); }, { immediate: true });
+    const filteredItems = computed(() => {
+      let items = processedItems.value;
+      const q = (searchQuery.value || '').toLowerCase().trim();
+
+      if (q) {
+        items = items.filter((item) => (item.name || '').toLowerCase().indexOf(q) !== -1);
+      }
+      // Source filter: currently all files are Internal — wired up for future use
+      // when a source field is added to the schema
+      return items;
+    });
+
+    watch(processedItems, (items) => { setItemCount(items.length || 0); }, { immediate: true });
+    watch(filteredItems, (items) => { setFilteredCount(items.length || 0); }, { immediate: true });
 
     const resolvedPrimaryColor = computed(() => props.content?.primaryColor || '#2d6a4f');
     const resolvedOutlineColor = computed(() => props.content?.outlineColor || '#2d6a4f');
@@ -214,7 +274,7 @@ export default {
         backgroundColor: bg,
         color: '#ffffff',
         borderColor: bg,
-        fontSize: (props.content?.fontSize ?? 14) + 'px',
+        fontSize: (props.content?.fontSize || 14) + 'px',
         boxShadow: isHovered && !isActive ? '0 2px 6px rgba(0,0,0,0.18)' : 'none',
         transform: isActive ? 'scale(0.97)' : 'scale(1)',
         transition: 'background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease',
@@ -230,7 +290,7 @@ export default {
         backgroundColor: isHovered ? (isActive ? darken(base, 40) : darken(base, 20)) : '#ffffff',
         color: isHovered ? '#ffffff' : base,
         borderColor: darkened,
-        fontSize: (props.content?.fontSize ?? 14) + 'px',
+        fontSize: (props.content?.fontSize || 14) + 'px',
         boxShadow: isHovered && !isActive ? '0 2px 6px rgba(0,0,0,0.18)' : 'none',
         transform: isActive ? 'scale(0.97)' : 'scale(1)',
         transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease',
@@ -240,30 +300,30 @@ export default {
     const containerStyle = computed(() => ({
       display: 'flex',
       flexDirection: 'column',
-      gap: (props.content?.cardGap ?? 12) + 'px',
+      gap: (props.content?.cardGap || 12) + 'px',
       width: '100%',
     }));
 
     const cardStyle = computed(() => ({
       background: props.content?.cardBackground || '#ffffff',
       border: '1px solid ' + (props.content?.cardBorderColor || '#e5e7eb'),
-      borderRadius: (props.content?.cardBorderRadius ?? 8) + 'px',
-      fontSize: (props.content?.fontSize ?? 14) + 'px',
+      borderRadius: (props.content?.cardBorderRadius || 8) + 'px',
+      fontSize: (props.content?.fontSize || 14) + 'px',
     }));
 
     const fileNameStyle = computed(() => ({
       color: props.content?.primaryColor || '#2d6a4f',
-      fontSize: (props.content?.fontSize ?? 14) + 'px',
+      fontSize: (props.content?.fontSize || 14) + 'px',
     }));
 
     const labelStyle = computed(() => ({
       color: props.content?.labelTextColor || '#6b7280',
-      fontSize: (props.content?.fontSize ?? 14) + 'px',
+      fontSize: (props.content?.fontSize || 14) + 'px',
     }));
 
     const valueStyle = computed(() => ({
       color: props.content?.valueTextColor || '#111827',
-      fontSize: (props.content?.fontSize ?? 14) + 'px',
+      fontSize: (props.content?.fontSize || 14) + 'px',
     }));
 
     const tagStyle = computed(() => ({
@@ -277,7 +337,7 @@ export default {
 
     const emptyStateStyle = computed(() => ({
       color: props.content?.labelTextColor || '#6b7280',
-      fontSize: (props.content?.fontSize ?? 14) + 'px',
+      fontSize: (props.content?.fontSize || 14) + 'px',
     }));
 
     const formatDate = (val) => {
@@ -306,25 +366,31 @@ export default {
     };
 
     const handleOpen = (item) => {
-      const payload = item?._original ?? item;
+      const payload = item?._original || item;
       setSelectedItem(payload);
       emit('trigger-event', { name: 'open-click', event: { file: payload } });
     };
 
     const handleEdit = (item) => {
-      const payload = item?._original ?? item;
+      const payload = item?._original || item;
       setSelectedItem(payload);
       emit('trigger-event', { name: 'edit-click', event: { file: payload } });
     };
 
     const handleNameClick = (item) => {
-      const payload = item?._original ?? item;
+      const payload = item?._original || item;
       setSelectedItem(payload);
       emit('trigger-event', { name: 'name-click', event: { file: payload } });
     };
 
     return {
       processedItems,
+      filteredItems,
+      searchQuery,
+      sourceFilter,
+      handleSearchInput,
+      handleSourceChange,
+      handleReset,
       containerStyle,
       cardStyle,
       getOpenButtonStyle,
@@ -343,6 +409,7 @@ export default {
       setActive,
       selectedItem,
       itemCount,
+      filteredCount,
       props,
       /* wwEditor:start */
       isEditing,
@@ -358,6 +425,85 @@ export default {
   box-sizing: border-box;
 }
 
+/* Filter Bar */
+.filter-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.filter-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  pointer-events: none;
+  line-height: 1;
+}
+
+.filter-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px 7px 30px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #111827;
+  background: #ffffff;
+  outline: none;
+  font-family: inherit;
+}
+
+.filter-input:focus {
+  border-color: #2d6a4f;
+}
+
+.filter-select {
+  flex-shrink: 0;
+  padding: 7px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #111827;
+  background: #ffffff;
+  outline: none;
+  font-family: inherit;
+  cursor: pointer;
+  max-width: 110px;
+}
+
+.filter-select:focus {
+  border-color: #2d6a4f;
+}
+
+.filter-reset {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #2d6a4f;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 2px;
+  font-family: inherit;
+  white-space: nowrap;
+  text-decoration: underline;
+}
+
+.filter-reset:hover {
+  color: #1a4a35;
+}
+
+/* Cards */
 .file-card {
   width: 100%;
   box-sizing: border-box;
