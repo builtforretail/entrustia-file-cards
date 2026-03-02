@@ -60,7 +60,7 @@
       <div class="card-field">
         <span class="field-label" :style="labelStyle">Source</span>
         <span class="field-value" :style="valueStyle">
-          <span class="badge badge--internal">Internal</span>
+          <span :class="item.source === 'Public' ? 'badge badge--public' : 'badge badge--internal'">{{ item.source }}</span>
         </span>
       </div>
 
@@ -222,6 +222,9 @@ export default {
         }
         if (!Array.isArray(tags)) tags = [];
 
+        const pathStr = (item?.dropbox_path_lower || item?.drive_url || '').toLowerCase();
+        const source = pathStr.indexOf('public uploads') !== -1 ? 'Public' : 'Internal';
+
         return {
           ...item,
           id: id || 'item-' + Math.random(),
@@ -233,6 +236,7 @@ export default {
           size_bytes: item?.size_bytes || 0,
           drive_url: item?.drive_url || '',
           dropbox_path_lower: item?.dropbox_path_lower || '',
+          source: source,
           _original: item,
         };
       });
@@ -245,8 +249,12 @@ export default {
       if (q) {
         items = items.filter((item) => (item.name || '').toLowerCase().indexOf(q) !== -1);
       }
-      // Source filter: currently all files are Internal — wired up for future use
-      // when a source field is added to the schema
+      const s = sourceFilter.value;
+      if (s === 'internal') {
+        items = items.filter((item) => item.source === 'Internal');
+      } else if (s === 'portal') {
+        items = items.filter((item) => item.source === 'Public');
+      }
       return items;
     });
 
@@ -593,6 +601,16 @@ export default {
   display: inline-block;
   background: #e8f4f0;
   color: #2d6a4f;
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge--public {
+  display: inline-block;
+  background: #e8f0fb;
+  color: #1a56a0;
   border-radius: 12px;
   padding: 2px 10px;
   font-size: 12px;
