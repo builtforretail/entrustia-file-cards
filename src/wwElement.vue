@@ -21,39 +21,126 @@
       <button class="filter-reset" type="button" @click="handleReset">Reset</button>
     </div>
 
+    <!-- Select All Row -->
+    <div v-if="filteredItems.length > 0" class="select-all-row">
+      <label class="checkbox-label">
+        <input
+          type="checkbox"
+          class="card-checkbox"
+          :checked="allSelected"
+          :indeterminate.prop="someSelected && !allSelected"
+          @change="toggleSelectAll"
+        />
+        <span class="select-all-text">{{ allSelected ? 'Deselect all' : 'Select all' }} ({{ filteredItems.length }})</span>
+      </label>
+    </div>
+
+    <!-- Action Banner — shown when 1+ items selected -->
+    <div v-if="selectedIds.length > 0" class="action-banner">
+
+      <!-- AI suggestion banner (conditional) -->
+      <div v-if="bannerType === 'accept-all'" class="ai-suggestion-row">
+        <span class="ai-icon">💡</span>
+        <span class="ai-text">
+          <strong>Accept all folder suggestions</strong> for the selected files
+        </span>
+        <button class="btn-banner btn-banner--primary" type="button" @click="handleAcceptAll">
+          Accept all suggestions
+        </button>
+      </div>
+
+      <div v-else-if="bannerType === 'accept-and-move'" class="ai-suggestion-row">
+        <span class="ai-icon">✨</span>
+        <span class="ai-text">
+          AI Suggestion: Move to <strong>{{ singleSuggestionFolderName }}</strong> folder
+        </span>
+        <button class="btn-banner btn-banner--primary" type="button" @click="handleAcceptAndMove">
+          Accept &amp; Move
+        </button>
+      </div>
+
+      <div v-else-if="bannerType === 'create-and-move'" class="ai-suggestion-row">
+        <span class="ai-icon">✨</span>
+        <span class="ai-text">
+          AI suggestion: Create new folder called <strong>{{ singleSuggestionFolderName }}</strong>
+        </span>
+        <button class="btn-banner btn-banner--primary" type="button" @click="handleCreateAndMove">
+          Create &amp; Move
+        </button>
+      </div>
+
+      <!-- Manual action bar — always shown when selection active -->
+      <div class="manual-action-row">
+        <span class="select-folder-label">Select Folder:</span>
+        <select class="folder-select" :value="moveFolderTarget" @change="handleMoveFolderChange">
+          <option value="">Move to...</option>
+          <option
+            v-for="folder in moveableFolders"
+            :key="folder.id"
+            :value="folder.id"
+          >{{ folder.name }}</option>
+        </select>
+        <button
+          class="btn-banner btn-banner--primary"
+          type="button"
+          :disabled="!moveFolderTarget"
+          @click="handleMoveFiles"
+        >
+          Move file(s)
+        </button>
+        <button class="btn-banner btn-banner--outline" type="button" @click="handleCancel">
+          Cancel
+        </button>
+        <button class="btn-banner btn-banner--danger" type="button" @click="handleDeleteFiles">
+          Delete files
+        </button>
+      </div>
+    </div>
+
     <!-- Cards -->
     <div
-      v-for="item in filteredItems"
+      v-for="item in paginatedItems"
       :key="item.id"
       class="file-card"
+      :class="{ 'file-card--selected': isSelected(item.id) }"
       :style="cardStyle"
     >
-      <!-- Action Row -->
-      <div class="card-actions">
-        <button
-          class="btn-action btn-open"
-          :style="getOpenButtonStyle(item.id)"
-          type="button"
-          @click="handleOpen(item)"
-          @mouseenter="setHover(item.id, 'open', true)"
-          @mouseleave="setHover(item.id, 'open', false)"
-          @mousedown="setActive(item.id, 'open', true)"
-          @mouseup="setActive(item.id, 'open', false)"
-        >
-          Open
-        </button>
-        <button
-          class="btn-action btn-edit"
-          :style="getEditButtonStyle(item.id)"
-          type="button"
-          @click="handleEdit(item)"
-          @mouseenter="setHover(item.id, 'edit', true)"
-          @mouseleave="setHover(item.id, 'edit', false)"
-          @mousedown="setActive(item.id, 'edit', true)"
-          @mouseup="setActive(item.id, 'edit', false)"
-        >
-          Edit
-        </button>
+      <!-- Card Top Row: checkbox + actions -->
+      <div class="card-top-row">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            class="card-checkbox"
+            :checked="isSelected(item.id)"
+            @change="toggleSelect(item.id, item)"
+          />
+        </label>
+        <div class="card-actions">
+          <button
+            class="btn-action btn-open"
+            :style="getOpenButtonStyle(item.id)"
+            type="button"
+            @click="handleOpen(item)"
+            @mouseenter="setHover(item.id, 'open', true)"
+            @mouseleave="setHover(item.id, 'open', false)"
+            @mousedown="setActive(item.id, 'open', true)"
+            @mouseup="setActive(item.id, 'open', false)"
+          >
+            Open
+          </button>
+          <button
+            class="btn-action btn-edit"
+            :style="getEditButtonStyle(item.id)"
+            type="button"
+            @click="handleEdit(item)"
+            @mouseenter="setHover(item.id, 'edit', true)"
+            @mouseleave="setHover(item.id, 'edit', false)"
+            @mousedown="setActive(item.id, 'edit', true)"
+            @mouseup="setActive(item.id, 'edit', false)"
+          >
+            Edit
+          </button>
+        </div>
       </div>
 
       <!-- Source Badge -->
@@ -65,7 +152,8 @@
       </div>
 
       <!-- File Name -->
-      <div class="card-field file-name-field">
+      <div class="card-field">
+        <span class="field-label" :style="labelStyle">File Name</span>
         <span
           class="file-name"
           :style="fileNameStyle"
@@ -79,10 +167,26 @@
         </span>
       </div>
 
+      <!-- Actual Folder Name -->
+      <div class="card-field">
+        <span class="field-label" :style="labelStyle">Folder Name</span>
+        <span class="field-value" :style="valueStyle">{{ item.folderName || '—' }}</span>
+      </div>
+
       <!-- AI Folder Suggestion -->
       <div class="card-field">
         <span class="field-label" :style="labelStyle">AI Folder Suggestion</span>
-        <span class="field-value" :style="valueStyle">{{ item.ai_folder_name || '—' }}</span>
+        <span class="field-value" :style="valueStyle">
+          <template v-if="item.isVerified">
+            <span class="verified-badge">✓ Verified</span>
+          </template>
+          <template v-else-if="item.ai_folder_name">
+            <span class="suggested-badge">Suggested: {{ item.ai_folder_name }}</span>
+          </template>
+          <template v-else>
+            <span>—</span>
+          </template>
+        </span>
       </div>
 
       <!-- AI Tags -->
@@ -130,6 +234,19 @@
     <div v-if="!filteredItems.length" class="empty-state" :style="emptyStateStyle">
       No files to display.
     </div>
+
+    <!-- Pagination -->
+    <div v-if="totalPages > 1" class="pagination-row">
+      <span class="pagination-info">{{ paginationInfo }}</span>
+      <div class="pagination-controls">
+        <button class="btn-page" type="button" :disabled="currentPage === 1" @click="goToPage(1)">«</button>
+        <button class="btn-page" type="button" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">‹</button>
+        <span class="page-indicator">Page {{ currentPage }} of {{ totalPages }}</span>
+        <button class="btn-page" type="button" :disabled="currentPage === totalPages" @click="goToPage(currentPage + 1)">›</button>
+        <button class="btn-page" type="button" :disabled="currentPage === totalPages" @click="goToPage(totalPages)">»</button>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -154,6 +271,7 @@ export default {
     const isEditing = computed(() => props.wwEditorState?.isEditing);
     /* wwEditor:end */
 
+    // ── Internal variables ────────────────────────────────────────────
     const { value: selectedItem, setValue: setSelectedItem } =
       wwLib.wwVariable.useComponentVariable({
         uid: props.uid,
@@ -178,10 +296,32 @@ export default {
         defaultValue: 0,
       });
 
-    // Filter state
+    const { value: selectedItems, setValue: setSelectedItems } =
+      wwLib.wwVariable.useComponentVariable({
+        uid: props.uid,
+        name: 'selectedItems',
+        type: 'array',
+        defaultValue: [],
+      });
+
+    const { value: selectedCount, setValue: setSelectedCount } =
+      wwLib.wwVariable.useComponentVariable({
+        uid: props.uid,
+        name: 'selectedCount',
+        type: 'number',
+        defaultValue: 0,
+      });
+
+    // ── Filter state ──────────────────────────────────────────────────
     const searchQuery = ref('');
     const sourceFilter = ref('all');
+    const currentPage = ref(1);
 
+    // ── Selection state ───────────────────────────────────────────────
+    const selectedIds = ref([]);
+    const selectedRawItems = ref([]);
+
+    // ── Hover / active button state ───────────────────────────────────
     const hoverState = ref({});
     const activeState = ref({});
 
@@ -193,26 +333,49 @@ export default {
       activeState.value = { ...activeState.value, [id + '-' + btn]: val };
     };
 
-    const handleSearchInput = (e) => {
-      searchQuery.value = e.target.value;
+    // ── Move folder target ────────────────────────────────────────────
+    const moveFolderTarget = ref('');
+
+    const handleMoveFolderChange = (e) => {
+      moveFolderTarget.value = e.target.value;
     };
 
-    const handleSourceChange = (e) => {
-      sourceFilter.value = e.target.value;
+    // ── Folders list helpers ──────────────────────────────────────────
+    const foldersList = computed(() => {
+      const list = props.content?.foldersList;
+      return Array.isArray(list) ? list : [];
+    });
+
+    const folderNameById = (folderId) => {
+      if (!folderId) return '';
+      const match = foldersList.value.find((f) => String(f.id) === String(folderId));
+      return match ? (match.name || '') : '';
     };
 
-    const handleReset = () => {
-      searchQuery.value = '';
-      sourceFilter.value = 'all';
+    const folderExistsByName = (name) => {
+      if (!name) return false;
+      return foldersList.value.some(
+        (f) => (f.name || '').toLowerCase() === (name || '').toLowerCase()
+      );
     };
 
+    // Folders available to move to — excludes current folder of the first selected item
+    const moveableFolders = computed(() => {
+      const list = foldersList.value;
+      if (!selectedIds.value.length) return list;
+      // Exclude the folder(s) that selected files are already in
+      const currentFolderIds = selectedRawItems.value.map((r) => String(r.folder_id || ''));
+      return list.filter((f) => !currentFolderIds.includes(String(f.id)));
+    });
+
+    // ── Processed items ───────────────────────────────────────────────
     const processedItems = computed(() => {
       const items = props.content?.data || [];
       const { resolveMappingFormula } = wwLib.wwFormula.useFormula();
 
       return items.map((item) => {
-        const id = resolveMappingFormula(props.content?.dataIdFormula, item) ?? item?.id;
-        const name = resolveMappingFormula(props.content?.dataNameFormula, item) ?? item?.name;
+        const id = resolveMappingFormula(props.content?.dataIdFormula, item) || item?.id;
+        const name = resolveMappingFormula(props.content?.dataNameFormula, item) || item?.name;
 
         let tags = [];
         if (Array.isArray(item?.ai_tags)) {
@@ -225,11 +388,22 @@ export default {
         const pathStr = (item?.dropbox_path_lower || item?.drive_url || '').toLowerCase();
         const source = pathStr.indexOf('public uploads') !== -1 ? 'Public' : 'Internal';
 
+        // Resolve actual folder name from foldersList
+        const folderName = folderNameById(item?.folder_id);
+
+        // Verified: ai_folder_name is empty/null OR matches the current folder name
+        const aiSuggestion = (item?.ai_folder_name || '').trim();
+        const isVerified = !aiSuggestion || aiSuggestion.toLowerCase() === (folderName || '').toLowerCase();
+
+        // New folder: has a suggestion AND it doesn't exist in foldersList
+        const isNewFolder = !isVerified && !folderExistsByName(aiSuggestion);
+
         return {
           ...item,
           id: id || 'item-' + Math.random(),
           name: name || item?.original_filename || 'Untitled',
-          ai_folder_name: item?.ai_folder_name || '',
+          folderName: folderName,
+          ai_folder_name: aiSuggestion,
           ai_tags: tags,
           ai_summary: item?.ai_summary || '',
           created_at: item?.created_at || '',
@@ -237,11 +411,14 @@ export default {
           drive_url: item?.drive_url || '',
           dropbox_path_lower: item?.dropbox_path_lower || '',
           source: source,
+          isVerified: isVerified,
+          isNewFolder: isNewFolder,
           _original: item,
         };
       });
     });
 
+    // ── Filtered items ────────────────────────────────────────────────
     const filteredItems = computed(() => {
       let items = processedItems.value;
       const q = (searchQuery.value || '').toLowerCase().trim();
@@ -258,9 +435,201 @@ export default {
       return items;
     });
 
+    // ── Pagination ────────────────────────────────────────────────────
+    const pageSize = computed(() => props.content?.pageSize || 20);
+
+    const totalPages = computed(() => {
+      return Math.max(1, Math.ceil(filteredItems.value.length / pageSize.value));
+    });
+
+    const paginatedItems = computed(() => {
+      const start = (currentPage.value - 1) * pageSize.value;
+      return filteredItems.value.slice(start, start + pageSize.value);
+    });
+
+    const paginationInfo = computed(() => {
+      const total = filteredItems.value.length;
+      const start = (currentPage.value - 1) * pageSize.value + 1;
+      const end = Math.min(currentPage.value * pageSize.value, total);
+      return start + ' to ' + end + ' of ' + total;
+    });
+
+    const goToPage = (page) => {
+      currentPage.value = Math.max(1, Math.min(page, totalPages.value));
+    };
+
+    // Reset page when filters change
+    watch([searchQuery, sourceFilter], () => { currentPage.value = 1; });
+
+    // ── Selection helpers ─────────────────────────────────────────────
+    const isSelected = (id) => selectedIds.value.indexOf(String(id)) !== -1;
+
+    const allSelected = computed(() =>
+      filteredItems.value.length > 0 &&
+      filteredItems.value.every((item) => isSelected(item.id))
+    );
+
+    const someSelected = computed(() =>
+      filteredItems.value.some((item) => isSelected(item.id))
+    );
+
+    const toggleSelect = (id, item) => {
+      const sid = String(id);
+      const idx = selectedIds.value.indexOf(sid);
+      if (idx === -1) {
+        selectedIds.value = [...selectedIds.value, sid];
+        selectedRawItems.value = [...selectedRawItems.value, item._original || item];
+      } else {
+        selectedIds.value = selectedIds.value.filter((x) => x !== sid);
+        selectedRawItems.value = selectedRawItems.value.filter(
+          (r) => String(r.id) !== sid
+        );
+      }
+      moveFolderTarget.value = '';
+    };
+
+    const toggleSelectAll = () => {
+      if (allSelected.value) {
+        selectedIds.value = [];
+        selectedRawItems.value = [];
+      } else {
+        selectedIds.value = filteredItems.value.map((item) => String(item.id));
+        selectedRawItems.value = filteredItems.value.map((item) => item._original || item);
+      }
+      moveFolderTarget.value = '';
+    };
+
+    // ── Banner logic ──────────────────────────────────────────────────
+    // Get selected processed items (not just raw)
+    const selectedProcessedItems = computed(() =>
+      filteredItems.value.filter((item) => isSelected(item.id))
+    );
+
+    const bannerType = computed(() => {
+      const sel = selectedProcessedItems.value;
+      if (!sel.length) return null;
+
+      const withSuggestions = sel.filter((item) => !item.isVerified && item.ai_folder_name);
+
+      if (sel.length === 1) {
+        const single = sel[0];
+        if (!single.isVerified && single.ai_folder_name) {
+          return single.isNewFolder ? 'create-and-move' : 'accept-and-move';
+        }
+        return null; // verified single — manual bar only
+      }
+
+      // Multiple selected
+      if (withSuggestions.length > 0) {
+        return 'accept-all';
+      }
+      return null; // all verified — manual bar only
+    });
+
+    const singleSuggestionFolderName = computed(() => {
+      const sel = selectedProcessedItems.value;
+      if (sel.length === 1) return sel[0].ai_folder_name || '';
+      return '';
+    });
+
+    // ── Watch selection → expose internal variables ───────────────────
+    watch(selectedIds, () => {
+      setSelectedItems(selectedRawItems.value);
+      setSelectedCount(selectedIds.value.length);
+      emit('trigger-event', {
+        name: 'selection-change',
+        event: {
+          selectedItems: selectedRawItems.value,
+          selectedCount: selectedIds.value.length,
+        },
+      });
+    });
+
     watch(processedItems, (items) => { setItemCount(items.length || 0); }, { immediate: true });
     watch(filteredItems, (items) => { setFilteredCount(items.length || 0); }, { immediate: true });
 
+    // ── Action handlers ───────────────────────────────────────────────
+    const handleAcceptAll = () => {
+      const sel = selectedProcessedItems.value;
+      const withSuggestions = sel.filter((item) => !item.isVerified && item.ai_folder_name);
+      emit('trigger-event', {
+        name: 'accept-suggestions',
+        event: { selectedItems: withSuggestions.map((i) => i._original || i) },
+      });
+    };
+
+    const handleAcceptAndMove = () => {
+      const sel = selectedProcessedItems.value;
+      if (!sel.length) return;
+      emit('trigger-event', {
+        name: 'accept-and-move',
+        event: { file: sel[0]._original || sel[0], folderName: sel[0].ai_folder_name },
+      });
+    };
+
+    const handleCreateAndMove = () => {
+      const sel = selectedProcessedItems.value;
+      if (!sel.length) return;
+      emit('trigger-event', {
+        name: 'create-and-move',
+        event: { file: sel[0]._original || sel[0], newFolderName: sel[0].ai_folder_name },
+      });
+    };
+
+    const handleMoveFiles = () => {
+      if (!moveFolderTarget.value) return;
+      const targetFolder = foldersList.value.find(
+        (f) => String(f.id) === String(moveFolderTarget.value)
+      );
+      emit('trigger-event', {
+        name: 'move-files',
+        event: {
+          selectedItems: selectedRawItems.value,
+          targetFolderId: moveFolderTarget.value,
+          targetFolder: targetFolder || null,
+        },
+      });
+    };
+
+    const handleDeleteFiles = () => {
+      emit('trigger-event', {
+        name: 'delete-files',
+        event: { selectedItems: selectedRawItems.value },
+      });
+    };
+
+    const handleCancel = () => {
+      selectedIds.value = [];
+      selectedRawItems.value = [];
+      moveFolderTarget.value = '';
+      emit('trigger-event', { name: 'cancel-selection', event: {} });
+    };
+
+    // ── Open / Edit / Name handlers ───────────────────────────────────
+    const handleOpen = (item) => {
+      const payload = item._original || item;
+      setSelectedItem(payload);
+      emit('trigger-event', { name: 'open-click', event: { file: payload } });
+    };
+
+    const handleEdit = (item) => {
+      const payload = item._original || item;
+      setSelectedItem(payload);
+      emit('trigger-event', { name: 'edit-click', event: { file: payload } });
+    };
+
+    const handleNameClick = (item) => {
+      const payload = item._original || item;
+      setSelectedItem(payload);
+      emit('trigger-event', { name: 'name-click', event: { file: payload } });
+    };
+
+    // ── Filter handlers ───────────────────────────────────────────────
+    const handleSearchInput = (e) => { searchQuery.value = e.target.value; };
+    const handleSourceChange = (e) => { sourceFilter.value = e.target.value; };
+    const handleReset = () => { searchQuery.value = ''; sourceFilter.value = 'all'; };
+
+    // ── Styles ────────────────────────────────────────────────────────
     const resolvedPrimaryColor = computed(() => props.content?.primaryColor || '#2d6a4f');
     const resolvedOutlineColor = computed(() => props.content?.outlineColor || '#2d6a4f');
 
@@ -322,6 +691,12 @@ export default {
     const fileNameStyle = computed(() => ({
       color: props.content?.primaryColor || '#2d6a4f',
       fontSize: (props.content?.fontSize || 14) + 'px',
+      fontWeight: '600',
+      textDecoration: 'underline',
+      cursor: 'pointer',
+      textAlign: 'right',
+      flex: '1',
+      wordBreak: 'break-all',
     }));
 
     const labelStyle = computed(() => ({
@@ -348,6 +723,7 @@ export default {
       fontSize: (props.content?.fontSize || 14) + 'px',
     }));
 
+    // ── Formatters ────────────────────────────────────────────────────
     const formatDate = (val) => {
       if (!val) return '—';
       try {
@@ -373,32 +749,51 @@ export default {
       return (n / (1024 * 1024)).toFixed(2) + ' MB';
     };
 
-    const handleOpen = (item) => {
-      const payload = item?._original || item;
-      setSelectedItem(payload);
-      emit('trigger-event', { name: 'open-click', event: { file: payload } });
-    };
-
-    const handleEdit = (item) => {
-      const payload = item?._original || item;
-      setSelectedItem(payload);
-      emit('trigger-event', { name: 'edit-click', event: { file: payload } });
-    };
-
-    const handleNameClick = (item) => {
-      const payload = item?._original || item;
-      setSelectedItem(payload);
-      emit('trigger-event', { name: 'name-click', event: { file: payload } });
-    };
-
     return {
+      // data
       processedItems,
       filteredItems,
+      paginatedItems,
+      // filter
       searchQuery,
       sourceFilter,
       handleSearchInput,
       handleSourceChange,
       handleReset,
+      // pagination
+      currentPage,
+      totalPages,
+      paginationInfo,
+      goToPage,
+      // selection
+      selectedIds,
+      isSelected,
+      allSelected,
+      someSelected,
+      toggleSelect,
+      toggleSelectAll,
+      // banner
+      bannerType,
+      singleSuggestionFolderName,
+      // action bar
+      moveFolderTarget,
+      moveableFolders,
+      handleMoveFolderChange,
+      // action handlers
+      handleAcceptAll,
+      handleAcceptAndMove,
+      handleCreateAndMove,
+      handleMoveFiles,
+      handleDeleteFiles,
+      handleCancel,
+      // open/edit/name
+      handleOpen,
+      handleEdit,
+      handleNameClick,
+      // hover/active
+      setHover,
+      setActive,
+      // styles
       containerStyle,
       cardStyle,
       getOpenButtonStyle,
@@ -408,16 +803,15 @@ export default {
       valueStyle,
       tagStyle,
       emptyStateStyle,
+      // formatters
       formatDate,
       formatSize,
-      handleOpen,
-      handleEdit,
-      handleNameClick,
-      setHover,
-      setActive,
+      // internal vars (returned so WeWeb can access)
       selectedItem,
       itemCount,
       filteredCount,
+      selectedItems,
+      selectedCount,
       props,
       /* wwEditor:start */
       isEditing,
@@ -433,7 +827,7 @@ export default {
   box-sizing: border-box;
 }
 
-/* Filter Bar */
+/* ── Filter Bar ─────────────────────────────────────────────────────── */
 .filter-bar {
   display: flex;
   flex-direction: row;
@@ -511,13 +905,165 @@ export default {
   color: #1a4a35;
 }
 
-/* Cards */
+/* ── Select All Row ─────────────────────────────────────────────────── */
+.select-all-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 2px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.card-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #2d6a4f;
+  flex-shrink: 0;
+}
+
+.select-all-text {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* ── Action Banner ──────────────────────────────────────────────────── */
+.action-banner {
+  background: #f0faf5;
+  border: 1px solid #c3e6d5;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-suggestion-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ai-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.ai-text {
+  flex: 1;
+  min-width: 0;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+
+.manual-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.select-folder-label {
+  font-size: 13px;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.folder-select {
+  flex: 1;
+  min-width: 100px;
+  max-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #ffffff;
+  outline: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.folder-select:focus {
+  border-color: #2d6a4f;
+}
+
+.btn-banner {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  border: 1.5px solid transparent;
+  transition: opacity 0.15s ease;
+}
+
+.btn-banner:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-banner--primary {
+  background: #2d6a4f;
+  color: #ffffff;
+  border-color: #2d6a4f;
+}
+
+.btn-banner--primary:hover:not(:disabled) {
+  background: #245a41;
+  border-color: #245a41;
+}
+
+.btn-banner--outline {
+  background: #ffffff;
+  color: #374151;
+  border-color: #d1d5db;
+}
+
+.btn-banner--outline:hover {
+  background: #f9fafb;
+}
+
+.btn-banner--danger {
+  background: #ffffff;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.btn-banner--danger:hover {
+  background: #fef2f2;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────── */
 .file-card {
   width: 100%;
   box-sizing: border-box;
-  padding: 16px;
+  padding: 14px 14px 12px;
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  transition: box-shadow 0.15s ease;
+}
+
+.file-card--selected {
+  border-color: #2d6a4f !important;
+  box-shadow: 0 0 0 2px rgba(45, 106, 79, 0.15);
+}
+
+.card-top-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
   gap: 10px;
 }
 
@@ -526,6 +1072,7 @@ export default {
   flex-direction: row;
   align-items: center;
   gap: 8px;
+  flex: 1;
 }
 
 .btn-action {
@@ -547,17 +1094,6 @@ export default {
 
 .btn-edit {
   border: 1.5px solid;
-}
-
-.file-name-field {
-  margin-top: 2px;
-}
-
-.file-name {
-  font-weight: 600;
-  text-decoration: underline;
-  cursor: pointer;
-  display: inline;
 }
 
 .card-field {
@@ -584,6 +1120,8 @@ export default {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex: 1;
+  justify-content: flex-end;
 }
 
 .field-value--summary {
@@ -617,6 +1155,23 @@ export default {
   font-weight: 600;
 }
 
+.verified-badge {
+  display: inline-block;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.suggested-badge {
+  display: inline-block;
+  background: #fef9c3;
+  color: #854d0e;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .tags-wrap {
   display: flex;
   flex-wrap: wrap;
@@ -629,10 +1184,61 @@ export default {
   display: inline-block;
 }
 
+/* ── Empty state ────────────────────────────────────────────────────── */
 .empty-state {
   width: 100%;
   padding: 32px 16px;
   text-align: center;
   box-sizing: border-box;
+}
+
+/* ── Pagination ─────────────────────────────────────────────────────── */
+.pagination-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 2px 4px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pagination-info {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-page {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #374151;
+  font-family: inherit;
+  transition: background 0.1s ease;
+}
+
+.btn-page:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.btn-page:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-indicator {
+  font-size: 12px;
+  color: #6b7280;
+  padding: 0 6px;
+  white-space: nowrap;
 }
 </style>
