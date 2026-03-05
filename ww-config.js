@@ -25,7 +25,7 @@ export default {
           ai_summary: 'Sample AI summary text.',
           original_filename: 'essay.pdf',
           physical_filename: 'essay_abc123.pdf',
-          dropbox_path_lower: '/docs/essay.pdf',
+          dropbox_path_lower: '/docs/internal uploads/essay.pdf',
         },
       ],
       options: {
@@ -38,6 +38,7 @@ export default {
           defaultValue: {
             id: 1,
             name: 'file.pdf',
+            folder_id: 1,
             mime_type: 'application/pdf',
             size_bytes: 0,
             ai_folder_name: '',
@@ -75,6 +76,36 @@ export default {
       /* wwEditor:end */
     },
 
+    foldersList: {
+      label: { en: 'Folders List' },
+      type: 'Array',
+      section: 'settings',
+      bindable: true,
+      defaultValue: [
+        { id: 1, name: 'Documents' },
+        { id: 2, name: 'Marketing Assets' },
+      ],
+      options: {
+        expandable: false,
+        item: {
+          type: 'Object',
+          defaultValue: { id: 1, name: 'Folder' },
+          options: {
+            item: {
+              id: { label: { en: 'ID' }, type: 'Number' },
+              name: { label: { en: 'Name' }, type: 'Text' },
+            },
+          },
+        },
+      },
+      /* wwEditor:start */
+      bindingValidation: {
+        type: 'array',
+        tooltip: 'Bind to FoldersList.data — used to resolve actual folder names and detect new AI-suggested folders.',
+      },
+      /* wwEditor:end */
+    },
+
     dataIdFormula: {
       label: { en: 'ID Field' },
       type: 'Formula',
@@ -105,14 +136,17 @@ export default {
         !Array.isArray(content.data) || !content.data?.length || !boundProps.data,
     },
 
-    showSource: {
-      label: { en: 'Show Source Badge' },
-      type: 'OnOff',
+    pageSize: {
+      label: { en: 'Cards per Page' },
+      type: 'Number',
       section: 'settings',
-      defaultValue: true,
+      defaultValue: 20,
+      min: 5,
+      max: 100,
+      step: 5,
       bindable: true,
       /* wwEditor:start */
-      bindingValidation: { type: 'boolean', tooltip: 'Show or hide the source badge (Internal / Portal).' },
+      bindingValidation: { type: 'number', tooltip: 'Number of file cards to show per page (default 20).' },
       /* wwEditor:end */
     },
 
@@ -149,6 +183,17 @@ export default {
       /* wwEditor:end */
     },
 
+    outlineColor: {
+      label: { en: 'Outline Colour (Edit button)' },
+      type: 'Color',
+      section: 'style',
+      defaultValue: '#2d6a4f',
+      bindable: true,
+      /* wwEditor:start */
+      bindingValidation: { type: 'string', tooltip: 'Colour for the Edit button border and text.' },
+      /* wwEditor:end */
+    },
+
     cardBackground: {
       label: { en: 'Card Background' },
       type: 'Color',
@@ -160,14 +205,78 @@ export default {
       /* wwEditor:end */
     },
 
-    cardBorderRadius: {
-      label: { en: 'Card Border Radius' },
-      type: 'Length',
+    cardBorderColor: {
+      label: { en: 'Card Border Colour' },
+      type: 'Color',
       section: 'style',
-      defaultValue: '10px',
+      defaultValue: '#e5e7eb',
       bindable: true,
       /* wwEditor:start */
-      bindingValidation: { type: 'string', tooltip: 'Border radius for each card.' },
+      bindingValidation: { type: 'string', tooltip: 'Border colour of each card.' },
+      /* wwEditor:end */
+    },
+
+    cardBorderRadius: {
+      label: { en: 'Card Border Radius' },
+      type: 'Number',
+      section: 'style',
+      defaultValue: 8,
+      min: 0,
+      max: 32,
+      step: 1,
+      bindable: true,
+      /* wwEditor:start */
+      bindingValidation: { type: 'number', tooltip: 'Border radius in pixels.' },
+      /* wwEditor:end */
+    },
+
+    cardGap: {
+      label: { en: 'Card Gap (px)' },
+      type: 'Number',
+      section: 'style',
+      defaultValue: 12,
+      min: 0,
+      max: 64,
+      step: 1,
+      bindable: true,
+      /* wwEditor:start */
+      bindingValidation: { type: 'number', tooltip: 'Vertical gap between cards in pixels.' },
+      /* wwEditor:end */
+    },
+
+    fontSize: {
+      label: { en: 'Font Size (px)' },
+      type: 'Number',
+      section: 'style',
+      defaultValue: 14,
+      min: 10,
+      max: 24,
+      step: 1,
+      bindable: true,
+      /* wwEditor:start */
+      bindingValidation: { type: 'number', tooltip: 'Base font size in pixels.' },
+      /* wwEditor:end */
+    },
+
+    labelTextColor: {
+      label: { en: 'Label Text Colour' },
+      type: 'Color',
+      section: 'style',
+      defaultValue: '#6b7280',
+      bindable: true,
+      /* wwEditor:start */
+      bindingValidation: { type: 'string', tooltip: 'Colour for field labels.' },
+      /* wwEditor:end */
+    },
+
+    valueTextColor: {
+      label: { en: 'Value Text Colour' },
+      type: 'Color',
+      section: 'style',
+      defaultValue: '#111827',
+      bindable: true,
+      /* wwEditor:start */
+      bindingValidation: { type: 'string', tooltip: 'Colour for field values.' },
       /* wwEditor:end */
     },
   },
@@ -188,6 +297,41 @@ export default {
       name: 'name-click',
       label: { en: 'On File Name click' },
       event: { file: null },
+    },
+    {
+      name: 'selection-change',
+      label: { en: 'On selection change' },
+      event: { selectedItems: [], selectedCount: 0 },
+    },
+    {
+      name: 'accept-suggestions',
+      label: { en: 'On Accept all suggestions' },
+      event: { selectedItems: [] },
+    },
+    {
+      name: 'accept-and-move',
+      label: { en: 'On Accept & Move (single existing folder)' },
+      event: { file: null, folderName: '' },
+    },
+    {
+      name: 'create-and-move',
+      label: { en: 'On Create & Move (new folder)' },
+      event: { file: null, newFolderName: '' },
+    },
+    {
+      name: 'move-files',
+      label: { en: 'On Move file(s)' },
+      event: { selectedItems: [], targetFolderId: null, targetFolder: null },
+    },
+    {
+      name: 'delete-files',
+      label: { en: 'On Delete files' },
+      event: { selectedItems: [] },
+    },
+    {
+      name: 'cancel-selection',
+      label: { en: 'On Cancel selection' },
+      event: {},
     },
   ],
 };
