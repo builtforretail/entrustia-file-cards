@@ -11,7 +11,17 @@
           placeholder="File Name"
           :value="searchQuery"
           @input="handleSearchInput"
+          @focus="searchFocused = true"
+          @blur="searchFocused = false"
+          :style="searchInputStyle"
         />
+        <button
+          v-if="searchQuery"
+          class="filter-clear"
+          type="button"
+          @click="clearSearch"
+          aria-label="Clear search"
+        >✕</button>
       </div>
       <select class="filter-select" :value="sourceFilter" @change="handleSourceChange">
         <option value="all">All</option>
@@ -35,78 +45,15 @@
       </label>
     </div>
 
-    <!-- Action Banner — shown when 1+ items selected -->
-    <div v-if="selectedIds.length > 0" class="action-banner">
-
-      <!-- AI suggestion banner (conditional) -->
-      <div v-if="bannerType === 'accept-all'" class="ai-suggestion-row">
-        <span class="ai-icon">💡</span>
-        <span class="ai-text">
-          <strong>Accept all folder suggestions</strong> for the selected files
-        </span>
-        <button class="btn-banner btn-banner--primary" type="button" @click="handleAcceptAll">
-          Accept all suggestions
-        </button>
-      </div>
-
-      <div v-else-if="bannerType === 'accept-and-move'" class="ai-suggestion-row">
-        <span class="ai-icon">✨</span>
-        <span class="ai-text">
-          AI Suggestion: Move to <strong>{{ singleSuggestionFolderName }}</strong> folder
-        </span>
-        <button class="btn-banner btn-banner--primary" type="button" @click="handleAcceptAndMove">
-          Accept &amp; Move
-        </button>
-      </div>
-
-      <div v-else-if="bannerType === 'create-and-move'" class="ai-suggestion-row">
-        <span class="ai-icon">✨</span>
-        <span class="ai-text">
-          AI suggestion: Create new folder called <strong>{{ singleSuggestionFolderName }}</strong>
-        </span>
-        <button class="btn-banner btn-banner--primary" type="button" @click="handleCreateAndMove">
-          Create &amp; Move
-        </button>
-      </div>
-
-      <!-- Manual action bar — always shown when selection active -->
-      <div class="manual-action-row">
-        <span class="select-folder-label">Select Folder:</span>
-        <select class="folder-select" :value="moveFolderTarget" @change="handleMoveFolderChange">
-          <option value="">Move to...</option>
-          <option
-            v-for="folder in moveableFolders"
-            :key="folder.id"
-            :value="folder.id"
-          >{{ folder.name }}</option>
-        </select>
-        <button
-          class="btn-banner btn-banner--primary"
-          type="button"
-          :disabled="!moveFolderTarget"
-          @click="handleMoveFiles"
-        >
-          Move file(s)
-        </button>
-        <button class="btn-banner btn-banner--outline" type="button" @click="handleCancel">
-          Cancel
-        </button>
-        <button class="btn-banner btn-banner--danger" type="button" @click="handleDeleteFiles">
-          Delete files
-        </button>
-      </div>
-    </div>
-
     <!-- Cards -->
     <div
       v-for="item in paginatedItems"
       :key="item.id"
       class="file-card"
       :class="{ 'file-card--selected': isSelected(item.id) }"
-      :style="cardStyle"
     >
-      <!-- Card Top Row: checkbox + actions -->
-      <div class="card-top-row">
+      <!-- Checkbox row -->
+      <div class="card-checkbox-row">
         <label class="checkbox-label">
           <input
             type="checkbox"
@@ -115,32 +62,6 @@
             @change="toggleSelect(item.id, item)"
           />
         </label>
-        <div class="card-actions">
-          <button
-            class="btn-action btn-open"
-            :style="getOpenButtonStyle(item.id)"
-            type="button"
-            @click="handleOpen(item)"
-            @mouseenter="setHover(item.id, 'open', true)"
-            @mouseleave="setHover(item.id, 'open', false)"
-            @mousedown="setActive(item.id, 'open', true)"
-            @mouseup="setActive(item.id, 'open', false)"
-          >
-            Open
-          </button>
-          <button
-            class="btn-action btn-edit"
-            :style="getEditButtonStyle(item.id)"
-            type="button"
-            @click="handleEdit(item)"
-            @mouseenter="setHover(item.id, 'edit', true)"
-            @mouseleave="setHover(item.id, 'edit', false)"
-            @mousedown="setActive(item.id, 'edit', true)"
-            @mouseup="setActive(item.id, 'edit', false)"
-          >
-            Edit
-          </button>
-        </div>
       </div>
 
       <!-- Source Badge -->
@@ -162,15 +83,7 @@
           @click="handleNameClick(item)"
           @keydown.enter="handleNameClick(item)"
           @keydown.space.prevent="handleNameClick(item)"
-        >
-          {{ item.name }}
-        </span>
-      </div>
-
-      <!-- Actual Folder Name -->
-      <div class="card-field">
-        <span class="field-label" :style="labelStyle">Folder Name</span>
-        <span class="field-value" :style="valueStyle">{{ item.folderName || '—' }}</span>
+        >{{ item.name }}</span>
       </div>
 
       <!-- AI Folder Suggestion -->
@@ -217,8 +130,14 @@
         <span class="field-value" :style="valueStyle">{{ formatSize(item.size_bytes) }}</span>
       </div>
 
+      <!-- Uploader -->
+      <div class="card-field">
+        <span class="field-label" :style="labelStyle">Uploader</span>
+        <span class="field-value" :style="valueStyle">{{ item.uploaderName || '—' }}</span>
+      </div>
+
       <!-- AI Summary -->
-      <div v-if="props.content && props.content.showAiSummary !== false" class="card-field">
+      <div v-if="props.content && props.content.showAiSummary !== false" class="card-field card-field--summary">
         <span class="field-label" :style="labelStyle">AI Summary</span>
         <span class="field-value field-value--summary" :style="valueStyle">{{ item.ai_summary || '—' }}</span>
       </div>
@@ -314,31 +233,13 @@ export default {
 
     // ── Filter state ──────────────────────────────────────────────────
     const searchQuery = ref('');
+    const searchFocused = ref(false);
     const sourceFilter = ref('all');
     const currentPage = ref(1);
 
     // ── Selection state ───────────────────────────────────────────────
     const selectedIds = ref([]);
     const selectedRawItems = ref([]);
-
-    // ── Hover / active button state ───────────────────────────────────
-    const hoverState = ref({});
-    const activeState = ref({});
-
-    const setHover = (id, btn, val) => {
-      hoverState.value = { ...hoverState.value, [id + '-' + btn]: val };
-    };
-
-    const setActive = (id, btn, val) => {
-      activeState.value = { ...activeState.value, [id + '-' + btn]: val };
-    };
-
-    // ── Move folder target ────────────────────────────────────────────
-    const moveFolderTarget = ref('');
-
-    const handleMoveFolderChange = (e) => {
-      moveFolderTarget.value = e.target.value;
-    };
 
     // ── Folders list helpers ──────────────────────────────────────────
     const foldersList = computed(() => {
@@ -358,15 +259,6 @@ export default {
         (f) => (f.name || '').toLowerCase() === (name || '').toLowerCase()
       );
     };
-
-    // Folders available to move to — excludes current folder of the first selected item
-    const moveableFolders = computed(() => {
-      const list = foldersList.value;
-      if (!selectedIds.value.length) return list;
-      // Exclude the folder(s) that selected files are already in
-      const currentFolderIds = selectedRawItems.value.map((r) => String(r.folder_id || ''));
-      return list.filter((f) => !currentFolderIds.includes(String(f.id)));
-    });
 
     // ── Processed items ───────────────────────────────────────────────
     const processedItems = computed(() => {
@@ -388,15 +280,14 @@ export default {
         const pathStr = (item?.dropbox_path_lower || item?.drive_url || '').toLowerCase();
         const source = pathStr.indexOf('public uploads') !== -1 ? 'Public' : 'Internal';
 
-        // Resolve actual folder name from foldersList
         const folderName = folderNameById(item?.folder_id);
 
-        // Verified: ai_folder_name is empty/null OR matches the current folder name
         const aiSuggestion = (item?.ai_folder_name || '').trim();
         const isVerified = !aiSuggestion || aiSuggestion.toLowerCase() === (folderName || '').toLowerCase();
-
-        // New folder: has a suggestion AND it doesn't exist in foldersList
         const isNewFolder = !isVerified && !folderExistsByName(aiSuggestion);
+
+        // Uploader: prefer uploader_email, fallback to uploader_name, fallback to user_id
+        const uploaderName = item?.uploader_email || item?.uploader_name || (item?.user_id ? 'User ' + item.user_id : '');
 
         return {
           ...item,
@@ -413,6 +304,7 @@ export default {
           source: source,
           isVerified: isVerified,
           isNewFolder: isNewFolder,
+          uploaderName: uploaderName,
           _original: item,
         };
       });
@@ -422,7 +314,6 @@ export default {
     const filteredItems = computed(() => {
       let items = processedItems.value;
       const q = (searchQuery.value || '').toLowerCase().trim();
-
       if (q) {
         items = items.filter((item) => (item.name || '').toLowerCase().indexOf(q) !== -1);
       }
@@ -438,9 +329,9 @@ export default {
     // ── Pagination ────────────────────────────────────────────────────
     const pageSize = computed(() => props.content?.pageSize || 20);
 
-    const totalPages = computed(() => {
-      return Math.max(1, Math.ceil(filteredItems.value.length / pageSize.value));
-    });
+    const totalPages = computed(() =>
+      Math.max(1, Math.ceil(filteredItems.value.length / pageSize.value))
+    );
 
     const paginatedItems = computed(() => {
       const start = (currentPage.value - 1) * pageSize.value;
@@ -458,10 +349,9 @@ export default {
       currentPage.value = Math.max(1, Math.min(page, totalPages.value));
     };
 
-    // Reset page when filters change
     watch([searchQuery, sourceFilter], () => { currentPage.value = 1; });
 
-    // ── Selection helpers ─────────────────────────────────────────────
+    // ── Selection ─────────────────────────────────────────────────────
     const isSelected = (id) => selectedIds.value.indexOf(String(id)) !== -1;
 
     const allSelected = computed(() =>
@@ -481,11 +371,8 @@ export default {
         selectedRawItems.value = [...selectedRawItems.value, item._original || item];
       } else {
         selectedIds.value = selectedIds.value.filter((x) => x !== sid);
-        selectedRawItems.value = selectedRawItems.value.filter(
-          (r) => String(r.id) !== sid
-        );
+        selectedRawItems.value = selectedRawItems.value.filter((r) => String(r.id) !== sid);
       }
-      moveFolderTarget.value = '';
     };
 
     const toggleSelectAll = () => {
@@ -496,43 +383,9 @@ export default {
         selectedIds.value = filteredItems.value.map((item) => String(item.id));
         selectedRawItems.value = filteredItems.value.map((item) => item._original || item);
       }
-      moveFolderTarget.value = '';
     };
 
-    // ── Banner logic ──────────────────────────────────────────────────
-    // Get selected processed items (not just raw)
-    const selectedProcessedItems = computed(() =>
-      filteredItems.value.filter((item) => isSelected(item.id))
-    );
-
-    const bannerType = computed(() => {
-      const sel = selectedProcessedItems.value;
-      if (!sel.length) return null;
-
-      const withSuggestions = sel.filter((item) => !item.isVerified && item.ai_folder_name);
-
-      if (sel.length === 1) {
-        const single = sel[0];
-        if (!single.isVerified && single.ai_folder_name) {
-          return single.isNewFolder ? 'create-and-move' : 'accept-and-move';
-        }
-        return null; // verified single — manual bar only
-      }
-
-      // Multiple selected
-      if (withSuggestions.length > 0) {
-        return 'accept-all';
-      }
-      return null; // all verified — manual bar only
-    });
-
-    const singleSuggestionFolderName = computed(() => {
-      const sel = selectedProcessedItems.value;
-      if (sel.length === 1) return sel[0].ai_folder_name || '';
-      return '';
-    });
-
-    // ── Watch selection → expose internal variables ───────────────────
+    // ── Watch selection → expose internal variables + emit ────────────
     watch(selectedIds, () => {
       setSelectedItems(selectedRawItems.value);
       setSelectedCount(selectedIds.value.length);
@@ -548,76 +401,7 @@ export default {
     watch(processedItems, (items) => { setItemCount(items.length || 0); }, { immediate: true });
     watch(filteredItems, (items) => { setFilteredCount(items.length || 0); }, { immediate: true });
 
-    // ── Action handlers ───────────────────────────────────────────────
-    const handleAcceptAll = () => {
-      const sel = selectedProcessedItems.value;
-      const withSuggestions = sel.filter((item) => !item.isVerified && item.ai_folder_name);
-      emit('trigger-event', {
-        name: 'accept-suggestions',
-        event: { selectedItems: withSuggestions.map((i) => i._original || i) },
-      });
-    };
-
-    const handleAcceptAndMove = () => {
-      const sel = selectedProcessedItems.value;
-      if (!sel.length) return;
-      emit('trigger-event', {
-        name: 'accept-and-move',
-        event: { file: sel[0]._original || sel[0], folderName: sel[0].ai_folder_name },
-      });
-    };
-
-    const handleCreateAndMove = () => {
-      const sel = selectedProcessedItems.value;
-      if (!sel.length) return;
-      emit('trigger-event', {
-        name: 'create-and-move',
-        event: { file: sel[0]._original || sel[0], newFolderName: sel[0].ai_folder_name },
-      });
-    };
-
-    const handleMoveFiles = () => {
-      if (!moveFolderTarget.value) return;
-      const targetFolder = foldersList.value.find(
-        (f) => String(f.id) === String(moveFolderTarget.value)
-      );
-      emit('trigger-event', {
-        name: 'move-files',
-        event: {
-          selectedItems: selectedRawItems.value,
-          targetFolderId: moveFolderTarget.value,
-          targetFolder: targetFolder || null,
-        },
-      });
-    };
-
-    const handleDeleteFiles = () => {
-      emit('trigger-event', {
-        name: 'delete-files',
-        event: { selectedItems: selectedRawItems.value },
-      });
-    };
-
-    const handleCancel = () => {
-      selectedIds.value = [];
-      selectedRawItems.value = [];
-      moveFolderTarget.value = '';
-      emit('trigger-event', { name: 'cancel-selection', event: {} });
-    };
-
-    // ── Open / Edit / Name handlers ───────────────────────────────────
-    const handleOpen = (item) => {
-      const payload = item._original || item;
-      setSelectedItem(payload);
-      emit('trigger-event', { name: 'open-click', event: { file: payload } });
-    };
-
-    const handleEdit = (item) => {
-      const payload = item._original || item;
-      setSelectedItem(payload);
-      emit('trigger-event', { name: 'edit-click', event: { file: payload } });
-    };
-
+    // ── Name click ────────────────────────────────────────────────────
     const handleNameClick = (item) => {
       const payload = item._original || item;
       setSelectedItem(payload);
@@ -627,58 +411,22 @@ export default {
     // ── Filter handlers ───────────────────────────────────────────────
     const handleSearchInput = (e) => { searchQuery.value = e.target.value; };
     const handleSourceChange = (e) => { sourceFilter.value = e.target.value; };
+    const clearSearch = () => { searchQuery.value = ''; };
     const handleReset = () => { searchQuery.value = ''; sourceFilter.value = 'all'; };
 
     // ── Styles ────────────────────────────────────────────────────────
     const resolvedPrimaryColor = computed(() => props.content?.primaryColor || '#2d6a4f');
-    const resolvedOutlineColor = computed(() => props.content?.outlineColor || '#2d6a4f');
-
-    const darken = (hex, amount) => {
-      const h = (hex || '#2d6a4f').replace('#', '');
-      const num = parseInt(h.length === 3 ? h.split('').map(function(c) { return c + c; }).join('') : h, 16);
-      const r = Math.max(0, (num >> 16) - amount);
-      const g = Math.max(0, ((num >> 8) & 0xff) - amount);
-      const b = Math.max(0, (num & 0xff) - amount);
-      return '#' + [r, g, b].map(function(v) { return v.toString(16).padStart(2, '0'); }).join('');
-    };
-
-    const getOpenButtonStyle = (id) => {
-      const isActive = activeState.value[id + '-open'];
-      const isHovered = hoverState.value[id + '-open'];
-      const base = resolvedPrimaryColor.value;
-      const bg = isActive ? darken(base, 40) : isHovered ? darken(base, 20) : base;
-      return {
-        backgroundColor: bg,
-        color: '#ffffff',
-        borderColor: bg,
-        fontSize: (props.content?.fontSize || 14) + 'px',
-        boxShadow: isHovered && !isActive ? '0 2px 6px rgba(0,0,0,0.18)' : 'none',
-        transform: isActive ? 'scale(0.97)' : 'scale(1)',
-        transition: 'background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease',
-      };
-    };
-
-    const getEditButtonStyle = (id) => {
-      const isActive = activeState.value[id + '-edit'];
-      const isHovered = hoverState.value[id + '-edit'];
-      const base = resolvedOutlineColor.value;
-      const darkened = isActive ? darken(base, 40) : isHovered ? darken(base, 20) : base;
-      return {
-        backgroundColor: isHovered ? (isActive ? darken(base, 40) : darken(base, 20)) : '#ffffff',
-        color: isHovered ? '#ffffff' : base,
-        borderColor: darkened,
-        fontSize: (props.content?.fontSize || 14) + 'px',
-        boxShadow: isHovered && !isActive ? '0 2px 6px rgba(0,0,0,0.18)' : 'none',
-        transform: isActive ? 'scale(0.97)' : 'scale(1)',
-        transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease',
-      };
-    };
 
     const containerStyle = computed(() => ({
       display: 'flex',
       flexDirection: 'column',
-      gap: (props.content?.cardGap || 12) + 'px',
+      gap: '0px',
       width: '100%',
+    }));
+
+    const searchInputStyle = computed(() => ({
+      borderColor: searchFocused.value ? (resolvedPrimaryColor.value) : '#e5e7eb',
+      boxShadow: searchFocused.value ? ('0 0 0 3px ' + resolvedPrimaryColor.value + '22') : 'none',
     }));
 
     const cardStyle = computed(() => ({
@@ -750,63 +498,37 @@ export default {
     };
 
     return {
-      // data
       processedItems,
       filteredItems,
       paginatedItems,
-      // filter
       searchQuery,
+      searchFocused,
       sourceFilter,
       handleSearchInput,
       handleSourceChange,
+      clearSearch,
       handleReset,
-      // pagination
+      searchInputStyle,
       currentPage,
       totalPages,
       paginationInfo,
       goToPage,
-      // selection
       selectedIds,
       isSelected,
       allSelected,
       someSelected,
       toggleSelect,
       toggleSelectAll,
-      // banner
-      bannerType,
-      singleSuggestionFolderName,
-      // action bar
-      moveFolderTarget,
-      moveableFolders,
-      handleMoveFolderChange,
-      // action handlers
-      handleAcceptAll,
-      handleAcceptAndMove,
-      handleCreateAndMove,
-      handleMoveFiles,
-      handleDeleteFiles,
-      handleCancel,
-      // open/edit/name
-      handleOpen,
-      handleEdit,
       handleNameClick,
-      // hover/active
-      setHover,
-      setActive,
-      // styles
       containerStyle,
       cardStyle,
-      getOpenButtonStyle,
-      getEditButtonStyle,
       fileNameStyle,
       labelStyle,
       valueStyle,
       tagStyle,
       emptyStateStyle,
-      // formatters
       formatDate,
       formatSize,
-      // internal vars (returned so WeWeb can access)
       selectedItem,
       itemCount,
       filteredCount,
@@ -825,6 +547,9 @@ export default {
 .file-card-list {
   width: 100%;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 /* ── Filter Bar ─────────────────────────────────────────────────────── */
@@ -833,7 +558,7 @@ export default {
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .filter-search-wrap {
@@ -850,29 +575,49 @@ export default {
   font-size: 13px;
   pointer-events: none;
   line-height: 1;
+  z-index: 1;
 }
 
 .filter-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 7px 10px 7px 30px;
-  border: 1px solid #e5e7eb;
+  padding: 7px 30px 7px 30px;
+  border: 1.5px solid #e5e7eb;
   border-radius: 6px;
   font-size: 13px;
   color: #111827;
   background: #ffffff;
   outline: none;
   font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.filter-input:focus {
-  border-color: #2d6a4f;
+.filter-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-clear:hover {
+  color: #374151;
 }
 
 .filter-select {
   flex-shrink: 0;
   padding: 7px 10px;
-  border: 1px solid #e5e7eb;
+  border: 1.5px solid #e5e7eb;
   border-radius: 6px;
   font-size: 13px;
   color: #111827;
@@ -881,6 +626,7 @@ export default {
   font-family: inherit;
   cursor: pointer;
   max-width: 110px;
+  transition: border-color 0.15s ease;
 }
 
 .filter-select:focus {
@@ -909,7 +655,7 @@ export default {
 .select-all-row {
   display: flex;
   align-items: center;
-  padding: 4px 2px;
+  padding: 4px 2px 8px;
 }
 
 .checkbox-label {
@@ -933,117 +679,6 @@ export default {
   color: #6b7280;
 }
 
-/* ── Action Banner ──────────────────────────────────────────────────── */
-.action-banner {
-  background: #f0faf5;
-  border: 1px solid #c3e6d5;
-  border-radius: 8px;
-  padding: 10px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.ai-suggestion-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.ai-icon {
-  font-size: 15px;
-  flex-shrink: 0;
-}
-
-.ai-text {
-  flex: 1;
-  min-width: 0;
-  color: #1a1a1a;
-  line-height: 1.4;
-}
-
-.manual-action-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.select-folder-label {
-  font-size: 13px;
-  color: #6b7280;
-  flex-shrink: 0;
-}
-
-.folder-select {
-  flex: 1;
-  min-width: 100px;
-  max-width: 180px;
-  padding: 6px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 13px;
-  background: #ffffff;
-  outline: none;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.folder-select:focus {
-  border-color: #2d6a4f;
-}
-
-.btn-banner {
-  flex-shrink: 0;
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  border: 1.5px solid transparent;
-  transition: opacity 0.15s ease;
-}
-
-.btn-banner:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.btn-banner--primary {
-  background: #2d6a4f;
-  color: #ffffff;
-  border-color: #2d6a4f;
-}
-
-.btn-banner--primary:hover:not(:disabled) {
-  background: #245a41;
-  border-color: #245a41;
-}
-
-.btn-banner--outline {
-  background: #ffffff;
-  color: #374151;
-  border-color: #d1d5db;
-}
-
-.btn-banner--outline:hover {
-  background: #f9fafb;
-}
-
-.btn-banner--danger {
-  background: #ffffff;
-  color: #b91c1c;
-  border-color: #fca5a5;
-}
-
-.btn-banner--danger:hover {
-  background: #fef2f2;
-}
-
 /* ── Cards ──────────────────────────────────────────────────────────── */
 .file-card {
   width: 100%;
@@ -1052,48 +687,22 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: box-shadow 0.15s ease;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07), 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .file-card--selected {
   border-color: #2d6a4f !important;
-  box-shadow: 0 0 0 2px rgba(45, 106, 79, 0.15);
+  box-shadow: 0 0 0 2px rgba(45, 106, 79, 0.15), 0 2px 8px rgba(0, 0, 0, 0.06) !important;
 }
 
-.card-top-row {
+.card-checkbox-row {
   display: flex;
-  flex-direction: row;
   align-items: center;
-  gap: 10px;
-}
-
-.card-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-}
-
-.btn-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 18px;
-  border-radius: 999px;
-  font-weight: 500;
-  line-height: 1.4;
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-}
-
-.btn-open {
-  border: 1.5px solid transparent;
-}
-
-.btn-edit {
-  border: 1.5px solid;
 }
 
 .card-field {
@@ -1106,6 +715,10 @@ export default {
 }
 
 .card-field--tags {
+  align-items: flex-start;
+}
+
+.card-field--summary {
   align-items: flex-start;
 }
 
@@ -1127,11 +740,22 @@ export default {
 .field-value--summary {
   font-style: italic;
   font-weight: 400;
+  text-align: right;
+  line-height: 1.5;
 }
 
 .field-value--mono {
   font-family: monospace;
   font-size: 11px;
+  word-break: break-all;
+}
+
+.file-name {
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: right;
+  flex: 1;
   word-break: break-all;
 }
 
