@@ -106,6 +106,74 @@ export default {
       /* wwEditor:end */
     },
 
+    currentFolderName: {
+      label: { en: 'Current Folder Name' },
+      type: 'Text',
+      section: 'settings',
+      bindable: true,
+      defaultValue: '',
+      /* wwEditor:start */
+      bindingValidation: {
+        type: 'string',
+        tooltip: 'Bind to the name of the folder whose files are being displayed. Used to determine Verified vs Suggested status.',
+      },
+      /* wwEditor:end */
+    },
+
+    tenantMembersList: {
+      label: { en: 'Tenant Members List' },
+      type: 'Array',
+      section: 'settings',
+      bindable: true,
+      defaultValue: [],
+      options: {
+        expandable: false,
+        item: {
+          type: 'Object',
+          defaultValue: { user_id: 1, email: 'user@example.com' },
+          options: {
+            item: {
+              user_id: { label: { en: 'User ID' }, type: 'Number' },
+              email: { label: { en: 'Email' }, type: 'Text' },
+            },
+          },
+        },
+      },
+      /* wwEditor:start */
+      bindingValidation: {
+        type: 'array',
+        tooltip: 'Bind to TenantMembers.data — used to resolve internal uploader email from user_id.',
+      },
+      /* wwEditor:end */
+    },
+
+    publicSubmissionsList: {
+      label: { en: 'Public Submissions List' },
+      type: 'Array',
+      section: 'settings',
+      bindable: true,
+      defaultValue: [],
+      options: {
+        expandable: false,
+        item: {
+          type: 'Object',
+          defaultValue: { file_id: 1, email: 'submitter@example.com' },
+          options: {
+            item: {
+              file_id: { label: { en: 'File ID' }, type: 'Number' },
+              email: { label: { en: 'Email' }, type: 'Text' },
+            },
+          },
+        },
+      },
+      /* wwEditor:start */
+      bindingValidation: {
+        type: 'array',
+        tooltip: 'Bind to PublicSubmissionsList.data — used to resolve public portal uploader email from file_id.',
+      },
+      /* wwEditor:end */
+    },
+
     dataIdFormula: {
       label: { en: 'ID Field' },
       type: 'Formula',
@@ -180,17 +248,6 @@ export default {
       bindable: true,
       /* wwEditor:start */
       bindingValidation: { type: 'string', tooltip: 'Main brand colour used for buttons and accents.' },
-      /* wwEditor:end */
-    },
-
-    outlineColor: {
-      label: { en: 'Outline Colour (Edit button)' },
-      type: 'Color',
-      section: 'style',
-      defaultValue: '#2d6a4f',
-      bindable: true,
-      /* wwEditor:start */
-      bindingValidation: { type: 'string', tooltip: 'Colour for the Edit button border and text.' },
       /* wwEditor:end */
     },
 
