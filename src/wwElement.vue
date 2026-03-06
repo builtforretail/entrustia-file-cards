@@ -265,6 +265,11 @@ export default {
       const items = props.content?.data || [];
       const { resolveMappingFormula } = wwLib.wwFormula.useFormula();
 
+      // Read all prop-derived lists at the top so Vue tracks them as reactive dependencies
+      const membersList = Array.isArray(props.content?.tenantMembersList) ? props.content.tenantMembersList : [];
+      const submissionsList = Array.isArray(props.content?.publicSubmissionsList) ? props.content.publicSubmissionsList : [];
+      const currentFolderName = props.content?.currentFolderName || '';
+
       return items.map((item) => {
         const id = resolveMappingFormula(props.content?.dataIdFormula, item) || item?.id;
         const name = resolveMappingFormula(props.content?.dataNameFormula, item) || item?.name;
@@ -280,16 +285,13 @@ export default {
         const pathStr = (item?.dropbox_path_lower || item?.drive_url || '').toLowerCase();
         const source = pathStr.indexOf('public uploads') !== -1 ? 'Public' : 'Internal';
 
-        const folderName = folderNameById(item?.folder_id) || (props.content?.currentFolderName || '');
+        const folderName = folderNameById(item?.folder_id) || currentFolderName;
 
         const aiSuggestion = (item?.ai_folder_name || '').trim();
         const isVerified = !aiSuggestion || aiSuggestion.toLowerCase() === (folderName || '').toLowerCase();
         const isNewFolder = !isVerified && !folderExistsByName(aiSuggestion);
 
         // Internal uploader: look up email from TenantMembers by user_id
-        const membersList = Array.isArray(props.content?.tenantMembersList) ? props.content.tenantMembersList : [];
-        const submissionsList = Array.isArray(props.content?.publicSubmissionsList) ? props.content.publicSubmissionsList : [];
-
         let uploaderName = '';
         if (item?.user_id) {
           const member = membersList.find((m) => String(m.user_id) === String(item.user_id));
