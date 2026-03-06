@@ -280,14 +280,26 @@ export default {
         const pathStr = (item?.dropbox_path_lower || item?.drive_url || '').toLowerCase();
         const source = pathStr.indexOf('public uploads') !== -1 ? 'Public' : 'Internal';
 
-        const folderName = folderNameById(item?.folder_id);
+        const folderName = folderNameById(item?.folder_id) || (props.content?.currentFolderName || '');
 
         const aiSuggestion = (item?.ai_folder_name || '').trim();
         const isVerified = !aiSuggestion || aiSuggestion.toLowerCase() === (folderName || '').toLowerCase();
         const isNewFolder = !isVerified && !folderExistsByName(aiSuggestion);
 
-        // Uploader: prefer uploader_email, fallback to uploader_name, fallback to user_id
-        const uploaderName = item?.uploader_email || item?.uploader_name || (item?.user_id ? 'User ' + item.user_id : '');
+        // Internal uploader: look up email from TenantMembers by user_id
+        const membersList = Array.isArray(props.content?.tenantMembersList) ? props.content.tenantMembersList : [];
+        const submissionsList = Array.isArray(props.content?.publicSubmissionsList) ? props.content.publicSubmissionsList : [];
+
+        let uploaderName = '';
+        if (item?.user_id) {
+          const member = membersList.find((m) => String(m.user_id) === String(item.user_id));
+          if (member) uploaderName = member.email || '';
+        }
+        // Public uploader: look up email from PublicSubmissions by file_id
+        if (!uploaderName && item?.id) {
+          const submission = submissionsList.find((s) => String(s.file_id) === String(item.id));
+          if (submission) uploaderName = submission.email || '';
+        }
 
         return {
           ...item,
@@ -473,9 +485,11 @@ export default {
 
     // ── Formatters ────────────────────────────────────────────────────
     const formatDate = (val) => {
-      if (!val) return '—';
+      if (!val && val !== 0) return '—';
       try {
-        const d = new Date(val);
+        // Xano returns timestamps as millisecond integers; ISO strings also handled
+        const n = Number(val);
+        const d = (!isNaN(n) && n > 1000000000000) ? new Date(n) : new Date(val);
         if (isNaN(d.getTime())) return String(val);
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
