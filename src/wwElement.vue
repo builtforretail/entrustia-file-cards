@@ -257,6 +257,18 @@ export default {
       });
     }
 
+    // ── clearSelection prop watcher ───────────────────────────────────
+    // When the clearSelection prop flips to true, clear all internal state
+    watch(() => props.content?.clearSelection, (val) => {
+      if (val === true) {
+        selectedIds.value = [];
+        selectedRawItems.value = [];
+        setSelectedItems([]);
+        setSelectedCount(0);
+        emit('trigger-event', { name: 'cancel-selection', event: {} });
+      }
+    });
+
     // ── Folders list helpers ──────────────────────────────────────────
     const foldersList = computed(() => {
       const list = props.content?.foldersList;
