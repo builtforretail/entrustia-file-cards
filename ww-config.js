@@ -240,6 +240,17 @@ export default {
       /* wwEditor:end */
     },
 
+    clearSelection: {
+      label: { en: 'Clear Selection' },
+      type: 'OnOff',
+      section: 'settings',
+      defaultValue: false,
+      bindable: true,
+      /* wwEditor:start */
+      bindingValidation: { type: 'boolean', tooltip: 'Bind a page variable here. Set it to true from a workflow to clear all selected checkboxes, then reset it to false.' },
+      /* wwEditor:end */
+    },
+
     primaryColor: {
       label: { en: 'Primary Colour' },
       type: 'Color',
