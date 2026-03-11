@@ -338,6 +338,13 @@ export default {
     },
   },
 
+  actions: [
+    {
+      name: 'deselectAll',
+      label: { en: 'Deselect all' },
+    },
+  ],
+
   triggerEvents: [
     {
       name: 'open-click',
