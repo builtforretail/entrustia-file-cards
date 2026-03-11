@@ -242,18 +242,20 @@ export default {
     const selectedRawItems = ref([]);
 
     // ── Component actions (callable from WeWeb workflows) ────────────────
-    wwLib.wwVariable.useComponentAction({
-      uid: props.uid,
-      name: 'deselectAll',
-      label: 'Deselect all',
-      action: () => {
-        selectedIds.value = [];
-        selectedRawItems.value = [];
-        setSelectedItems([]);
-        setSelectedCount(0);
-        emit('trigger-event', { name: 'cancel-selection', event: {} });
-      },
-    });
+    if (typeof wwLib?.wwVariable?.useComponentAction === 'function') {
+      wwLib.wwVariable.useComponentAction({
+        uid: props.uid,
+        name: 'deselectAll',
+        label: 'Deselect all',
+        action: () => {
+          selectedIds.value = [];
+          selectedRawItems.value = [];
+          setSelectedItems([]);
+          setSelectedCount(0);
+          emit('trigger-event', { name: 'cancel-selection', event: {} });
+        },
+      });
+    }
 
     // ── Folders list helpers ──────────────────────────────────────────
     const foldersList = computed(() => {
