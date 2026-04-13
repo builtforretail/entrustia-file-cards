@@ -241,7 +241,7 @@ export default {
     const selectedIds = ref([]);
     const selectedRawItems = ref([]);
 
-    // ── Component actions (callable from WeWeb workflows) ────────────────
+    // ── Component actions (callable from WeWeb workflows) ────────────
     if (typeof wwLib?.wwVariable?.useComponentAction === 'function') {
       wwLib.wwVariable.useComponentAction({
         uid: props.uid,
@@ -252,22 +252,53 @@ export default {
           selectedRawItems.value = [];
           setSelectedItems([]);
           setSelectedCount(0);
+          setSelectedItem(null);
           emit('trigger-event', { name: 'cancel-selection', event: {} });
         },
       });
     }
 
     // ── clearSelection prop watcher ───────────────────────────────────
-    // When the clearSelection prop flips to true, clear all internal state
     watch(() => props.content?.clearSelection, (val) => {
       if (val === true) {
         selectedIds.value = [];
         selectedRawItems.value = [];
         setSelectedItems([]);
         setSelectedCount(0);
+        setSelectedItem(null);
         emit('trigger-event', { name: 'cancel-selection', event: {} });
       }
     });
+
+    // ── AUTO-CLEAR SELECTION WHEN DATA CHANGES ────────────────────────
+    // After delete + collection refresh, data IDs change. Drop any
+    // selected IDs that no longer exist. If none survive, action bar clears.
+    watch(
+      () => {
+        const items = props.content?.data;
+        if (!Array.isArray(items)) return '';
+        return items.map(i => i?.id).join(',');
+      },
+      (newIdString) => {
+        if (!selectedIds.value.length) return;
+        const currentIds = new Set(
+          (newIdString || '').split(',').filter(Boolean).map(Number)
+        );
+        const surviving = selectedIds.value.filter(id => currentIds.has(Number(id)));
+        if (surviving.length !== selectedIds.value.length) {
+          const survivingRaw = selectedRawItems.value.filter(
+            item => currentIds.has(Number(item?.id))
+          );
+          selectedIds.value = surviving;
+          selectedRawItems.value = survivingRaw;
+          setSelectedItems(survivingRaw);
+          setSelectedCount(surviving.length);
+          if (surviving.length === 0) {
+            setSelectedItem(null);
+          }
+        }
+      }
+    );
 
     // ── Folders list helpers ──────────────────────────────────────────
     const foldersList = computed(() => {
@@ -517,7 +548,6 @@ export default {
     const formatDate = (val) => {
       if (!val && val !== 0) return '—';
       try {
-        // Xano returns timestamps as millisecond integers; ISO strings also handled
         const n = Number(val);
         const d = (!isNaN(n) && n > 1000000000000) ? new Date(n) : new Date(val);
         if (isNaN(d.getTime())) return String(val);
